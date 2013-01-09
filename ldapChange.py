@@ -6,13 +6,16 @@
 
 # Imports
 import re
+import sys
+import os
 
 # Globals
-logDir = '/Users/eparker/scripts/git/ldap-logs'
+logDir = '/home/eric/scripts/git/ldap-logs'
 logFile = logDir + '/auditlog.ldif'
 logDb = logDir + '/change.db'
 
 start_reg = re.compile(r'# modify\s+(\d+).*')
+
 
 def parsefile(oldIds):
     print oldIds
@@ -20,10 +23,16 @@ def parsefile(oldIds):
     for line in open(logFile):
         line = line.strip()
         
+        # Start of a new change log
         start_match = re.search(start_reg,line)
         if start_match:
             change_id = start_match.group(1)
             print change_id
+            
+        #End of a that change log 
+        end_check = re.match(r'# end modify ' change_id ,line)
+        if end_check:
+            sys.exit()   
 
 def main():
     prevId = [] 
