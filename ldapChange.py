@@ -5,20 +5,86 @@
 # then need to send a cef message into syslog.
 
 # Imports
+from collections import defaultdict
 import re
 import sys
 import os
+import calendar
 
 # Globals
-logDir = '/home/eric/scripts/git/ldap-logs'
+#logDir = '/home/eric/scripts/git/ldap-logs'
+logDir = '/Users/eparker/scripts/git/ldap-logs'
 logFile = logDir + '/auditlog.ldif'
 logDb = logDir + '/change.db'
 
 start_reg = re.compile(r'# modify\s+(\d+).*')
+dn_reg = re.compile(r'-->dn: mail=(.*?)\,.*')
+id_reg = re.compile(r'--># modify (\d+)\s+(.*?)\s+-->')
+change_reg = re.compile(r'-->changetype:\s+(\w+)\s+-->replace:\s+(\w+)')
+date_reg = re.compile(r'(\d\d\d\d)(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)')
 
+def datecef(ldapdate):
+    date_find = re.search(date_reg,ldapdate)
+    if date_find:
+        lyear = date_find.group(1)
+        lmon = int(date_find.group(2))
+        mon_low = calendar.month_abbr[lmon]
+        mon_name = mon_low.upper()
+        
+        lday = date_find.group(3)
+        lhour = date_find.group(4)
+        lmin = date_find.group(5)
+        lsec = date_find.group(6)
+    
+    cef_stamp = mon_name + ' ' + lday + ' ' + lyear + ' ' + lhour + ':' + lmin + ':' + lsec 
+    return cef_stamp    
+    
+    
+def spank(blob):
+    lcef = {}
+    #print blob
+    
+    # find the id
+    id_find = re.search(id_reg,blob)
+    if id_find:
+        lcef['cn1'] = id_find.group(1)
+        lcef['cn1Label'] = 'logId'
+        lcef['cs4'] = id_find.group(2)
+        lcef['cs4Label'] = 'fullDN'
+        
+    
+    # find the dn
+    user_find = re.search(dn_reg,blob)
+    if user_find:
+        lcef['suser'] = user_find.group(1)
+        
+    # find the change and modify name
+    change_find = re.search(change_reg,blob)
+    if change_find:
+        change_type = change_find.group(1)
+        mod_param = change_find.group(2)
+        lcef['cs2'] = change_type
+        lcef['cs2Label'] = 'changeType'
+        
+        lcef['cs3'] = mod_param
+        lcef['cs3Label'] = 'modParameter'
+        
+        lcef['name'] = change_type + " " + mod_param
+        
+    mod_find = re.search(r'-->'+str(mod_param)+r':\s+(\d+)',blob)
+    if mod_find and mod_param == 'hgAccessDate':
+        change_date = datecef(mod_find.group(1))
+        lcef['end'] = change_date
+
+    print lcef.items()    
 
 def parsefile(oldIds):
-    print oldIds
+    #print oldIds
+    mid_track = 'off'
+    log_minder = ''
+    # Set up the main data structure, values will default to a new string.
+    connections = defaultdict(str)
+    
     
     for line in open(logFile):
         line = line.strip()
@@ -27,11 +93,21 @@ def parsefile(oldIds):
         start_match = re.search(start_reg,line)
         if start_match:
             change_id = start_match.group(1)
-            print change_id
+            mid_track = 'on'    
+
+        if mid_track == 'on': # start collecting data within
+            if line == '-':
+                continue
+            log_minder = log_minder + " -->" + line
             
-        #End of a that change log 
-        end_check = re.match(r'# end modify ' change_id ,line)
-        if end_check:
+            
+        end_modify = '# end modify ' + change_id
+        end_add = '# end add ' + change_id
+        if line == end_modify or line == end_add:
+            # done with that log entry now parse it
+            spank(log_minder)
+            mid_track = 'off'
+            del log_minder
             sys.exit()   
 
 def main():
@@ -44,7 +120,6 @@ def main():
     parsefile(prevId)
 
     
-# Write out new id's    
 
 
 if __name__ == '__main__':
