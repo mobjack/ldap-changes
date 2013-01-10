@@ -10,8 +10,16 @@ import re
 import sys
 import os
 import calendar
+import syslog
 
 # Globals
+cef_vend = 'mozilla'
+cef_prod = 'Openldap Change Script'
+cef_vers = '0.1'
+cef_id = '4'
+cef_sev = '4'
+
+
 #logDir = '/home/eric/scripts/git/ldap-logs'
 logDir = '/Users/eparker/scripts/git/ldap-logs'
 logFile = logDir + '/auditlog.ldif'
@@ -22,6 +30,37 @@ dn_reg = re.compile(r'-->dn: mail=(.*?)\,.*')
 id_reg = re.compile(r'--># modify (\d+)\s+(.*?)\s+-->')
 change_reg = re.compile(r'-->changetype:\s+(\w+)\s+-->replace:\s+(\w+)')
 date_reg = re.compile(r'(\d\d\d\d)(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)')
+
+def logit(cef):
+    syslog.openlog('ldapChanges', 0, syslog.LOG_LOCAL4)
+    syslog.syslog(syslog.LOG_INFO, cef)
+    syslog.closelog
+
+def cefit(cefblob):
+    log_ext = ''
+    #print cefblob.items()
+    print ''
+    # Standard CEF
+    #CEF header:
+    #CEF:0|Device Vendor|Device Product|Device Version|Signature ID|Name|Severity|
+    
+    if cefblob['name']:
+        cef_head =  'CEF:0|' + cef_vend + '|' + cef_prod + '|' + cef_vers + '|' + cef_id + '|' + cefblob['name'] + '|' + cef_sev + '|'
+    else:
+        print 'Exit: no name given'
+        print cefblob.items()
+        os.sys.exit()
+    
+    #Extenstions
+    for log_key in cefblob.keys():
+        if log_key == 'name':
+            continue # Skip it this is in the header
+        
+        log_ext = log_key + '=' + cefblob[log_key] + ' ' + log_ext
+        
+    #Pull em together for full CEF message, muha ha ha!
+    cef_msg = cef_head + log_ext
+    print cef_msg
 
 def datecef(ldapdate):
     date_find = re.search(date_reg,ldapdate)
@@ -39,6 +78,8 @@ def datecef(ldapdate):
     cef_stamp = mon_name + ' ' + lday + ' ' + lyear + ' ' + lhour + ':' + lmin + ':' + lsec 
     return cef_stamp    
     
+def eqclean(eqblob):
+    return eqblob.replace('=','\=')
     
 def spank(blob):
     lcef = {}
@@ -49,7 +90,7 @@ def spank(blob):
     if id_find:
         lcef['cn1'] = id_find.group(1)
         lcef['cn1Label'] = 'logId'
-        lcef['cs4'] = id_find.group(2)
+        lcef['cs4'] = eqclean(id_find.group(2))
         lcef['cs4Label'] = 'fullDN'
         
     
@@ -76,7 +117,8 @@ def spank(blob):
         change_date = datecef(mod_find.group(1))
         lcef['end'] = change_date
 
-    print lcef.items()    
+    #print lcef.items()
+    cefit(lcef)
 
 def parsefile(oldIds):
     #print oldIds
@@ -120,7 +162,5 @@ def main():
     parsefile(prevId)
 
     
-
-
 if __name__ == '__main__':
     main()
