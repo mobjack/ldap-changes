@@ -154,8 +154,9 @@ def parsefile(oldIds):
 
 def main():
     prevId = [] 
-    # Create a tuple of all previous logs
-    for line in open(logDb):
+    # Create a tuple of all previous logs 
+    # This will track which ones we have done in the past
+    for line in open(logDb): # eventually this will be a parameter from command line for now its testing.
         line = line.strip()
         prevId.append(line)
     
