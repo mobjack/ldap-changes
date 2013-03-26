@@ -28,7 +28,7 @@ logDb = logDir + '/change.db'
 start_reg = re.compile(r'# modify\s+(\d+).*')
 dn_reg = re.compile(r'-->dn: mail=(.*?)\,.*')
 id_reg = re.compile(r'--># modify (\d+)\s+(.*?)\s+-->')
-change_reg = re.compile(r'-->changetype:\s+(\w+)\s+-->replace:\s+(\w+)')
+change_reg = re.compile(r'-->changetype:\s+(\w+)\s+-->(replace|add|delete):\s+(\w+)')
 date_reg = re.compile(r'(\d\d\d\d)(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)')
 
 def logit(cef):
@@ -49,7 +49,7 @@ def cefit(cefblob):
     else:
         print 'Exit: no name given'
         print cefblob.items()
-        os.sys.exit()
+        sys.exit()
     
     #Extenstions
     for log_key in cefblob.keys():
@@ -84,7 +84,7 @@ def eqclean(eqblob):
 def spank(blob):
     lcef = {}
     #print blob
-    
+   
     # find the id
     id_find = re.search(id_reg,blob)
     if id_find:
@@ -97,13 +97,13 @@ def spank(blob):
     # find the dn
     user_find = re.search(dn_reg,blob)
     if user_find:
-        lcef['suser'] = user_find.group(1)
+        lcef['duser'] = user_find.group(1)
         
     # find the change and modify name
     change_find = re.search(change_reg,blob)
     if change_find:
         change_type = change_find.group(1)
-        mod_param = change_find.group(2)
+        mod_param = change_find.group(3)
         lcef['cs2'] = change_type
         lcef['cs2Label'] = 'changeType'
         
@@ -117,20 +117,20 @@ def spank(blob):
         change_date = datecef(mod_find.group(1))
         lcef['end'] = change_date
 
+
+
     #print lcef.items()
     cefit(lcef)
 
-def parsefile(oldIds):
+def parsefile(f_dump):
     #print oldIds
-    mid_track = 'off'
-    log_minder = ''
     # Set up the main data structure, values will default to a new string.
+    log_minder = ''
     connections = defaultdict(str)
     
     
     for line in open(logFile):
         line = line.strip()
-        
         # Start of a new change log
         start_match = re.search(start_reg,line)
         if start_match:
@@ -148,19 +148,19 @@ def parsefile(oldIds):
         if line == end_modify or line == end_add:
             # done with that log entry now parse it
             spank(log_minder)
-            mid_track = 'off'
-            del log_minder
-            sys.exit()   
+            log_minder = ''
+            #sys.exit()   
 
 def main():
-    prevId = [] 
+    filedump = [] 
     # Create a tuple of all previous logs 
     # This will track which ones we have done in the past
-    for line in open(logDb): # eventually this will be a parameter from command line for now its testing.
-        line = line.strip()
-        prevId.append(line)
+    #for line in open(logDb): # eventually this will be a parameter from command line for now its testing.
+    #   line = line.strip()
+    #   filedump.append(line)
     
-    parsefile(prevId)
+    #parsefile(lodDb)
+    parsefile('stuff')
 
     
 if __name__ == '__main__':
