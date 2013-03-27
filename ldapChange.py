@@ -14,7 +14,7 @@ import syslog
 
 # Globals
 cef_vend = 'mozilla'
-cef_prod = 'Openldap Change Script'
+cef_prod = 'Openldap Change'
 cef_vers = '0.1'
 cef_id = '4'
 cef_sev = '4'
@@ -22,14 +22,19 @@ cef_sev = '4'
 
 #logDir = '/home/eric/scripts/git/ldap-logs'
 logDir = '/Users/eparker/scripts/git/ldap-logs'
-logFile = logDir + '/auditlog.ldif'
+logFile = logDir + '/auditlog.ldif-20130327'
 logDb = logDir + '/change.db'
 
-start_reg = re.compile(r'# modify\s+(\d+).*')
+start_reg = re.compile(r'# (modify|add|delete)\s+(\d+).*')
 dn_reg = re.compile(r'-->dn: mail=(.*?)\,.*')
-id_reg = re.compile(r'--># modify (\d+)\s+(.*?)\s+-->')
-change_reg = re.compile(r'-->changetype:\s+(\w+)\s+-->(replace|add|delete):\s+(\w+)')
+id_reg = re.compile(r'--># (modify|add|delete) (\d+)\s+(.*?)\s+-->')
+change_reg = re.compile(r'.*?-->changetype:\s+(\w+)\s+-->(replace|add|delete|employeeType|\w+):\s+(\w+).*')
 date_reg = re.compile(r'(\d\d\d\d)(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)')
+emp_reg = re.compile(r'.*?cn:\s+(.*?)\s+-->')
+mail_reg = re.compile(r'.*?mail:\s+(.*?)\s+-->')
+changer_reg = re.compile(r'.*?modifiersName:\s+mail=(.*?)\,.*?')
+timer_reg = re.compile(r'.*?-->modifyTimestamp:\s+(\d+)')
+cs1Info_reg = re.compile(r'.*?-->changeType:\s+\w+\s+-->(\w+): \w+ -->(\w+) (.*?)-->.*')
 
 def logit(cef):
     syslog.openlog('ldapChanges', 0, syslog.LOG_LOCAL4)
@@ -38,8 +43,7 @@ def logit(cef):
 
 def cefit(cefblob):
     log_ext = ''
-    #print cefblob.items()
-    print ''
+    #print ''
     # Standard CEF
     #CEF header:
     #CEF:0|Device Vendor|Device Product|Device Version|Signature ID|Name|Severity|
@@ -83,27 +87,60 @@ def eqclean(eqblob):
     
 def spank(blob):
     lcef = {}
+    print ''
     #print blob
    
     # find the id
     id_find = re.search(id_reg,blob)
     if id_find:
-        lcef['cn1'] = id_find.group(1)
+        lcef['cn1'] = eqclean(id_find.group(2))
         lcef['cn1Label'] = 'logId'
-        lcef['cs4'] = eqclean(id_find.group(2))
-        lcef['cs4Label'] = 'fullDN'
         
-    
-    # find the dn
     user_find = re.search(dn_reg,blob)
     if user_find:
         lcef['duser'] = user_find.group(1)
+      
+    changerName = re.search(changer_reg,blob)
+    if changerName:
+        lcef['suser'] = changerName.group(1)
         
+    modTime = re.search(timer_reg,blob)
+    if modTime:
+        change_date = datecef(modTime.group(1))
+        lcef['end'] = change_date
+        
+   
     # find the change and modify name
     change_find = re.search(change_reg,blob)
-    if change_find:
+    if change_find.group(1) == 'add' and (change_find.group(2) == 'employeeType' or change_find.group(2) == 'physicalDeliveryOfficeName'):
+        change_type = change_find.group(1)
+        lcef['cs2'] = 'Add Employee'
+        lcef['cs2Label'] = 'changeType'
+        lcef['name'] = 'add Employee'
+        
+        employeeName = re.search(emp_reg,blob)
+        if employeeName:
+            lcef['cs5'] = employeeName.group(1)
+            lcef['cs5Label'] = 'fullName'
+        
+        employeeEmail = re.search(mail_reg,blob)
+        if employeeName:
+            lcef['cs6'] = employeeEmail.group(1)
+            lcef['cs6Label'] = 'emailAddress'
+        
+    elif change_find.group(1) == 'modify':
+        #print 'here'    
         change_type = change_find.group(1)
         mod_param = change_find.group(3)
+        
+        getCs1 = re.search(cs1Info_reg,blob)
+        
+        if getCs1:
+            print getCs1.group(1)
+            cs1set = getCs1.group(1) + ' ' + getCs1.group(2) + ' ' + getCs1.group(3)
+            print cs1set
+            
+            
         lcef['cs2'] = change_type
         lcef['cs2Label'] = 'changeType'
         
@@ -111,19 +148,16 @@ def spank(blob):
         lcef['cs3Label'] = 'modParameter'
         
         lcef['name'] = change_type + " " + mod_param
-        
-    mod_find = re.search(r'-->'+str(mod_param)+r':\s+(\d+)',blob)
-    if mod_find and mod_param == 'hgAccessDate':
-        change_date = datecef(mod_find.group(1))
-        lcef['end'] = change_date
+      
+    else:
+        print blob
+        lcef['name'] = 'skip'
 
-
-
+    return(lcef)
     #print lcef.items()
-    cefit(lcef)
+    #cefit(lcef)
 
 def parsefile(f_dump):
-    #print oldIds
     # Set up the main data structure, values will default to a new string.
     log_minder = ''
     connections = defaultdict(str)
@@ -134,7 +168,7 @@ def parsefile(f_dump):
         # Start of a new change log
         start_match = re.search(start_reg,line)
         if start_match:
-            change_id = start_match.group(1)
+            change_id = start_match.group(2)
             mid_track = 'on'    
 
         if mid_track == 'on': # start collecting data within
@@ -147,9 +181,16 @@ def parsefile(f_dump):
         end_add = '# end add ' + change_id
         if line == end_modify or line == end_add:
             # done with that log entry now parse it
-            spank(log_minder)
-            log_minder = ''
-            #sys.exit()   
+            logfix = spank(log_minder)
+            
+            if logfix['name'] == 'skip':
+                log_minder = ''
+                print 'skipping'
+                continue
+            else:
+                cefit(logfix)
+                log_minder = ''
+   
 
 def main():
     filedump = [] 
@@ -161,7 +202,6 @@ def main():
     
     #parsefile(lodDb)
     parsefile('stuff')
-
-    
+  
 if __name__ == '__main__':
     main()
