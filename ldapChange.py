@@ -34,7 +34,8 @@ emp_reg = re.compile(r'.*?cn:\s+(.*?)\s+-->')
 mail_reg = re.compile(r'.*?mail:\s+(.*?)\s+-->')
 changer_reg = re.compile(r'.*?modifiersName:\s+mail=(.*?)\,.*?')
 timer_reg = re.compile(r'.*?-->modifyTimestamp:\s+(\d+)')
-cs1Info_reg = re.compile(r'.*?-->changeType:\s+\w+\s+-->(\w+): \w+ -->(\w+) (.*?)-->.*')
+cs1Info_reg = re.compile(r'.*?-->changetype:\s+\w+\s+-->(\w+).*?-->(.*?)-->.*')
+getDn_reg = re.compile(r'.*?-->dn:\s+(.*?)-->.*')
 
 def logit(cef):
     syslog.openlog('ldapChanges', 0, syslog.LOG_LOCAL4)
@@ -60,12 +61,15 @@ def cefit(cefblob):
         if log_key == 'name':
             continue # Skip it this is in the header
         
-        log_ext = log_key + '=' + cefblob[log_key] + ' ' + log_ext
+        #clean up the '=' should be escaped just incase of cef stupidity
+        blobdata = cefblob[log_key].replace('=','\=')
+        #log_ext = log_key + '=' + cefblob[log_key] + ' ' + log_ext
+        log_ext = log_key + '=' + blobdata + ' ' + log_ext        
         
     #Pull em together for full CEF message, muha ha ha!
     cef_msg = cef_head + log_ext
     print cef_msg
-
+  
 def datecef(ldapdate):
     date_find = re.search(date_reg,ldapdate)
     if date_find:
@@ -87,7 +91,7 @@ def eqclean(eqblob):
     
 def spank(blob):
     lcef = {}
-    print ''
+    #print ''
     #print blob
    
     # find the id
@@ -95,21 +99,32 @@ def spank(blob):
     if id_find:
         lcef['cn1'] = eqclean(id_find.group(2))
         lcef['cn1Label'] = 'logId'
-        
+ 
     user_find = re.search(dn_reg,blob)
     if user_find:
         lcef['duser'] = user_find.group(1)
-      
+
     changerName = re.search(changer_reg,blob)
     if changerName:
         lcef['suser'] = changerName.group(1)
-        
+   
     modTime = re.search(timer_reg,blob)
     if modTime:
         change_date = datecef(modTime.group(1))
         lcef['end'] = change_date
         
-   
+    getCs1 = re.search(cs1Info_reg,blob)
+    if getCs1:
+        cs1set = getCs1.group(1) + ' ' + getCs1.group(2)
+        lcef['cs1'] = cs1set
+        lcef['cs1Label'] = 'changetype'
+        
+    getCs2 = re.search(getDn_reg,blob)
+    if getCs2:
+        cs2set = getCs2.group(1)
+        lcef['cs2'] = cs2set
+        lcef['cs2Label'] = 'fullDn'
+        
     # find the change and modify name
     change_find = re.search(change_reg,blob)
     if change_find.group(1) == 'add' and (change_find.group(2) == 'employeeType' or change_find.group(2) == 'physicalDeliveryOfficeName'):
@@ -128,21 +143,12 @@ def spank(blob):
             lcef['cs6'] = employeeEmail.group(1)
             lcef['cs6Label'] = 'emailAddress'
         
-    elif change_find.group(1) == 'modify':
-        #print 'here'    
+    elif change_find.group(1) == 'modify':   
         change_type = change_find.group(1)
         mod_param = change_find.group(3)
-        
-        getCs1 = re.search(cs1Info_reg,blob)
-        
-        if getCs1:
-            print getCs1.group(1)
-            cs1set = getCs1.group(1) + ' ' + getCs1.group(2) + ' ' + getCs1.group(3)
-            print cs1set
-            
-            
-        lcef['cs2'] = change_type
-        lcef['cs2Label'] = 'changeType'
+          
+        #lcef['cs2'] = change_type
+        #lcef['cs2Label'] = 'changeType'
         
         lcef['cs3'] = mod_param
         lcef['cs3Label'] = 'modParameter'
@@ -155,7 +161,7 @@ def spank(blob):
 
     return(lcef)
     #print lcef.items()
-    #cefit(lcef)
+    cefit(lcef)
 
 def parsefile(f_dump):
     # Set up the main data structure, values will default to a new string.
