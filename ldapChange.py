@@ -69,7 +69,6 @@ def cefit(cefblob):
         
         #clean up the '=' should be escaped just incase of cef stupidity
         blobdata = cefblob[log_key].replace('=','\=')
-        #log_ext = log_key + '=' + cefblob[log_key] + ' ' + log_ext
         log_ext = log_key + '=' + blobdata + ' ' + log_ext        
         
     #Pull em together for full CEF message, muha ha ha!
@@ -166,7 +165,6 @@ def spank(blob):
         lcef['name'] = 'skip'
 
     return(lcef)
-    #print lcef.items()
     cefit(lcef)
 
 def parsefile(f_dump):
@@ -189,7 +187,7 @@ def parsefile(f_dump):
             log_minder = log_minder + " -->" + line
             
             
-        end_modify = '# end modify ' + change_id
+        end=_modify = '# end modify ' + change_id
         end_add = '# end add ' + change_id
         if line == end_modify or line == end_add:
             # done with that log entry now parse it
@@ -203,16 +201,31 @@ def parsefile(f_dump):
                 cefit(logfix)
                 log_minder = ''
    
-
-def main():
-    filedump = [] 
-    # Create a tuple of all previous logs 
-    # This will track which ones we have done in the past
-    #for line in open(logDb): # eventually this will be a parameter from command line for now its testing.
-    #   line = line.strip()
-    #   filedump.append(line)
+def getlastcount():
+    fcheck = os.path.isfile(logDb)
+    if fcheck:
+        fdata = file(logDb).read()
+        fdata = fdata.strip()
+        sdata = str.split(fdata,'_')
+        return sdata
+    else:
+        return ['0','0']
     
-    #parsefile(lodDb)
+def getCountNow():
+    with open(logFile) as f:
+        for i, l in enumerate(f):
+            pass
+    return i + 1
+  
+def main():
+    lastRunInfo = getlastcount()
+    lastLine = int(lastRunInfo[1])
+    
+    nowCount = getCountNow()
+    print nowCount
+    print lastLine
+    sys.exit()
+    
     parsefile('stuff')
   
 if __name__ == '__main__':
