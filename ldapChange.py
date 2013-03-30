@@ -17,6 +17,7 @@ import sys
 import os
 import calendar
 import syslog
+import getopt
 
 # Globals
 cef_vend = 'mozilla'
@@ -167,13 +168,20 @@ def spank(blob):
     return(lcef)
     cefit(lcef)
 
-def parsefile(f_dump):
+def parsefile(startAt):
     # Set up the main data structure, values will default to a new string.
-    log_minder = ''
+    log_minder = ''      
     connections = defaultdict(str)
-    
+    logCount = 0
+    print startAt
     
     for line in open(logFile):
+        print logCount
+        #if logCount > startAt:
+        #    logCount = logCount + 1
+        #   continue
+        
+        
         line = line.strip()
         # Start of a new change log
         start_match = re.search(start_reg,line)
@@ -187,7 +195,7 @@ def parsefile(f_dump):
             log_minder = log_minder + " -->" + line
             
             
-        end=_modify = '# end modify ' + change_id
+        end_modify = '# end modify ' + change_id
         end_add = '# end add ' + change_id
         if line == end_modify or line == end_add:
             # done with that log entry now parse it
@@ -200,33 +208,74 @@ def parsefile(f_dump):
             else:
                 cefit(logfix)
                 log_minder = ''
+        
+        logCount = logCount + 1
    
 def getlastcount():
     fcheck = os.path.isfile(logDb)
     if fcheck:
         fdata = file(logDb).read()
         fdata = fdata.strip()
-        sdata = str.split(fdata,'_')
-        return sdata
+        return fdata
     else:
-        return ['0','0']
+        return 0
     
 def getCountNow():
     with open(logFile) as f:
         for i, l in enumerate(f):
             pass
     return i + 1
+
+def figureStart():
+    #lastRunInfo = getlastcount()
+    lastCount = int(getlastcount())
+    nowCount = int(getCountNow())
+    
+    #print 'lastCount:'
+    #print lastCount
+    #print 'nowCount:'
+    #print nowCount
+    
+    if nowCount == lastCount:
+        sys.exit() # The file has not changed give up here
+    elif nowCount > lastCount:
+        return int(lastCount) + 1
+    elif nowCount < lastCount:
+        return 0
+    else:
+        return 0 
+
+def usage():
+    print '\nldapChange.py   -e process everything in the db file\n\t\t-i process the db file starting from last run stop'
   
-def main():
-    lastRunInfo = getlastcount()
-    lastLine = int(lastRunInfo[1])
+def main(argv):
+    run_type = 'inc'
+    try:
+       opts, args = getopt.getopt(argv,"eih")
+    except getopt.GetoptError:
+       usage()
+       sys.exit(2)
     
-    nowCount = getCountNow()
-    print nowCount
-    print lastLine
-    sys.exit()
+    optCount = len(opts)
+    if optCount > 1:
+        print '\nYou have to many arguments, either e or i'
+        usage()
+        sys.exit()
+        
+    for opt, arg in opts:
+        if opt == '-h':
+            usage()
+            sys.exit()
+        elif opt == '-i':
+            runStart = figureStart()
+        else:
+            runStart = 0
     
-    parsefile('stuff')
+    #print 'Start at line:'
+    #print runStart
+
+    
+    parsefile(runStart)
   
 if __name__ == '__main__':
-    main()
+    main(sys.argv[1:])
