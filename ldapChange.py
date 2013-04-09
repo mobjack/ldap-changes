@@ -179,7 +179,10 @@ def parsefile(startAt):
     log_minder = ''      
     connections = defaultdict(str)
     logCount = 0
-
+    mid_track = ''
+    end_modify = ''
+    end_add = ''
+    change_id = ''
     
     for line in open(logFile):
         logCount = logCount + 1
@@ -206,7 +209,8 @@ def parsefile(startAt):
             
         end_modify = '# end modify ' + change_id
         end_add = '# end add ' + change_id
-        if line == end_modify or line == end_add:
+        end_delete = '# end delete ' + change_id
+        if line == end_modify or line == end_add or line == end_delete:
             # done with that log entry now parse it
             logfix = spank(log_minder)
             
@@ -299,3 +303,4 @@ def main(argv):
   
 if __name__ == '__main__':
     main(sys.argv[1:])
+
