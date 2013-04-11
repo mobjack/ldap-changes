@@ -16,6 +16,7 @@ import os
 import calendar
 import syslog
 import getopt
+#import traceback
 
 # Globals
 cef_vend = 'mozilla'
@@ -35,7 +36,8 @@ logDb = logDir + '/audit-track.log'
 start_reg = re.compile(r'# (modify|add|delete)\s+(\d+).*')
 dn_reg = re.compile(r'-->dn: mail=(.*?)\,.*')
 id_reg = re.compile(r'--># (modify|add|delete) (\d+)\s+(.*?)\s+-->')
-change_reg = re.compile(r'.*?-->changetype:\s+(\w+)\s+-->(replace|add|delete|employeeType|\w+):\s+(\w+).*')
+change_reg = re.compile(r'.*?-->changetype:\s+(\w+)\s+-->(replace|add|delete|employeeType|\#\s+end\s+delete|\w+):\s+(\w+).*')
+delChange_reg = re.compile(' --> --># (delete) (\d+) \S+ (mail=(\S+),o=com,dc=mozilla) -->dn: (\S+) -->changetype: delete --># end delete \d+')
 date_reg = re.compile(r'(\d\d\d\d)(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)')
 emp_reg = re.compile(r'.*?cn:\s+(.*?)\s+-->')
 mail_reg = re.compile(r'.*?mail:\s+(.*?)\s+-->')
@@ -116,10 +118,10 @@ def spank(blob):
     if changerName:
         lcef['suser'] = changerName.group(1)
    
-    modTime = re.search(timer_reg,blob)
-    if modTime:
-        change_date = datecef(modTime.group(1))
-        lcef['end'] = change_date
+    #modTime = re.search(timer_reg,blob)
+    #if modTime:
+    #    change_date = datecef(modTime.group(1))
+    #    lcef['end'] = change_date
         
     getCs1 = re.search(cs1Info_reg,blob)
     if getCs1:
@@ -134,9 +136,23 @@ def spank(blob):
         lcef['cs2Label'] = 'fullDn'
         
     # find the change and modify name
-    change_find = re.search(change_reg,blob)
-    if change_find.group(1) == 'add' and (change_find.group(2) == 'employeeType' or change_find.group(2) == 'physicalDeliveryOfficeName'):
-        change_type = change_find.group(1)
+          
+    
+    change_attr = ''
+    change_name = ''
+    change_info = ''
+    try:
+        change_find = re.search(change_reg,blob)
+        change_attr = change_find.group(1)
+        change_name = change_find.group(2)
+        change_info = change_find.group(3)
+    
+    except AttributeError:
+        pass
+    
+    #if change_find.group(1) == 'add' and (change_find.group(2) == 'employeeType' or change_find.group(2) == 'physicalDeliveryOfficeName'):
+    if change_attr == 'add' and (change_name == 'employeeType' or change_name == 'physicalDeliveryOfficeName'):
+        change_type = change_attr
         lcef['cs2'] = 'Add Employee'
         lcef['cs2Label'] = 'changeType'
         lcef['name'] = 'add Employee'
@@ -151,9 +167,9 @@ def spank(blob):
             lcef['cs6'] = employeeEmail.group(1)
             lcef['cs6Label'] = 'emailAddress'
         
-    elif change_find.group(1) == 'modify':   
-        change_type = change_find.group(1)
-        mod_param = change_find.group(3)
+    elif change_attr == 'modify':   
+        change_type = change_attr
+        mod_param = change_info
         
         lcef['cs3'] = mod_param
         lcef['cs3Label'] = 'modParameter'
@@ -170,9 +186,43 @@ def spank(blob):
         unparsed = cef_head + cef_ext
         logit(unparsed)
         lcef['name'] = 'skip'
+        
+    
+    del_attr = ''
+    del_dn = ''
+    del_suser = ''
+    del_cs1 = ''
+    del_id = ''
+
+    
+    try:
+        delete_find = re.match(delChange_reg,blob)
+        del_attr = delete_find.group(1)
+        del_id = delete_find.group(2)
+        del_cs1 = delete_find.group(3)
+        del_suser = delete_find.group(4)
+        del_cs2 = delete_find.group(5)     
+        #import pdb; pdb.set_trace()
+        
+    except AttributeError:
+        #traceback.print_exc
+        pass
+    
+    
+
+    if del_attr:
+        lcef['cs1'] = del_attr
+        lcef['cs1Label'] = 'changetype'
+        
+        lcef['suser'] = del_suser
+        lcef['cn1'] = del_id
+        lcef['cs1'] = del_cs1
+        lcef['cs2'] = del_cs2
+        lcef['name'] = 'delete'
+ 
 
     return(lcef)
-    cefit(lcef)
+    #cefit(lcef)
 
 def parsefile(startAt):
     # Set up the main data structure, values will default to a new string.
